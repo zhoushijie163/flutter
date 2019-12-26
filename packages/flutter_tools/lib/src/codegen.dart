@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,12 +8,13 @@ import 'artifacts.dart';
 import 'base/context.dart';
 import 'base/file_system.dart';
 import 'base/platform.dart';
+import 'build_info.dart';
 import 'compile.dart';
 import 'dart/package_map.dart';
 import 'globals.dart';
 import 'project.dart';
 
-// Arbitrarily choosen multi-root file scheme. This is used to configure the
+// Arbitrarily chosen multi-root file scheme. This is used to configure the
 // frontend_server to resolve a package uri to multiple filesystem directories.
 // In this case, the source directory and a generated directory.
 const String kMultiRootScheme = 'org-dartlang-app';
@@ -32,7 +33,7 @@ CodeGenerator get codeGenerator => context.get<CodeGenerator>();
 abstract class CodeGenerator {
   const CodeGenerator();
 
-  /// Starts a persistent code generting daemon.
+  /// Starts a persistent code generating daemon.
   ///
   /// The defines of the daemon command are the arguments required in the
   /// flutter_build kernel builder.
@@ -43,7 +44,7 @@ abstract class CodeGenerator {
   Future<void> generateBuildScript(FlutterProject flutterProject);
 
   /// Create generated packages file which adds a multi-root scheme to the user's
-  /// project directory. Currently we only replace the root package with a multiroot
+  /// project directory. Currently we only replace the root package with a multi-root
   /// scheme. To support codegen on arbitrary packages we would need to do
   /// this for each dependency.
   void updatePackages(FlutterProject flutterProject) {
@@ -82,10 +83,8 @@ abstract class CodegenDaemon {
 /// An implementation of the [KernelCompiler] which delegates to build_runner.
 ///
 /// Only a subset of the arguments provided to the [KernelCompiler] are
-/// supported here. Using the build pipeline implies a fixed multiroot
+/// supported here. Using the build pipeline implies a fixed multi-root
 /// filesystem and requires a pubspec.
-///
-/// This is only safe to use if [experimentalBuildEnabled] is true.
 class CodeGeneratingKernelCompiler implements KernelCompiler {
   const CodeGeneratingKernelCompiler();
 
@@ -97,10 +96,10 @@ class CodeGeneratingKernelCompiler implements KernelCompiler {
     String outputFilePath,
     bool linkPlatformKernelIn = false,
     bool aot = false,
+    @required BuildMode buildMode,
+    bool causalAsyncStacks = true,
     bool trackWidgetCreation,
     List<String> extraFrontEndOptions,
-    String incrementalCompilerByteStorePath,
-    bool targetProductVm = false,
     // These arguments are currently unused.
     String sdkRoot,
     String packagesPath,
@@ -109,6 +108,8 @@ class CodeGeneratingKernelCompiler implements KernelCompiler {
     String depFilePath,
     TargetModel targetModel = TargetModel.flutter,
     String initializeFromDill,
+    String platformDill,
+    List<String> dartDefines,
   }) async {
     if (fileSystemRoots != null || fileSystemScheme != null || depFilePath != null || targetModel != null || sdkRoot != null || packagesPath != null) {
       printTrace('fileSystemRoots, fileSystemScheme, depFilePath, targetModel,'
@@ -133,10 +134,10 @@ class CodeGeneratingKernelCompiler implements KernelCompiler {
       outputFilePath: outputFilePath,
       linkPlatformKernelIn: linkPlatformKernelIn,
       aot: aot,
+      buildMode: buildMode,
+      causalAsyncStacks: causalAsyncStacks,
       trackWidgetCreation: trackWidgetCreation,
       extraFrontEndOptions: extraFrontEndOptions,
-      incrementalCompilerByteStorePath: incrementalCompilerByteStorePath,
-      targetProductVm: targetProductVm,
       sdkRoot: sdkRoot,
       packagesPath: PackageMap.globalGeneratedPackagesPath,
       fileSystemRoots: <String>[
@@ -147,6 +148,7 @@ class CodeGeneratingKernelCompiler implements KernelCompiler {
       depFilePath: depFilePath,
       targetModel: targetModel,
       initializeFromDill: initializeFromDill,
+      dartDefines: dartDefines,
     );
   }
 }
@@ -164,16 +166,24 @@ class CodeGeneratingResidentCompiler implements ResidentCompiler {
   /// codegen mode.
   static Future<ResidentCompiler> create({
     @required FlutterProject flutterProject,
+    @required BuildMode buildMode,
     bool trackWidgetCreation = false,
     CompilerMessageConsumer compilerMessageConsumer = printError,
     bool unsafePackageSerialization = false,
     String outputPath,
     String initializeFromDill,
     bool runCold = false,
+    TargetPlatform targetPlatform,
+    @required List<String> dartDefines,
   }) async {
     codeGenerator.updatePackages(flutterProject);
     final ResidentCompiler residentCompiler = ResidentCompiler(
-      artifacts.getArtifactPath(Artifact.flutterPatchedSdkPath),
+      artifacts.getArtifactPath(
+        Artifact.flutterPatchedSdkPath,
+        platform: targetPlatform,
+        mode: buildMode,
+      ),
+      buildMode: buildMode,
       trackWidgetCreation: trackWidgetCreation,
       packagesPath: PackageMap.globalGeneratedPackagesPath,
       fileSystemRoots: <String>[
@@ -184,6 +194,7 @@ class CodeGeneratingResidentCompiler implements ResidentCompiler {
       targetModel: TargetModel.flutter,
       unsafePackageSerialization: unsafePackageSerialization,
       initializeFromDill: initializeFromDill,
+      dartDefines: dartDefines,
     );
     if (runCold) {
       return residentCompiler;

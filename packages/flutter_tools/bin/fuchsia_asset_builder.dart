@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,10 +13,9 @@ import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/context_runner.dart';
 import 'package:flutter_tools/src/devfs.dart';
-import 'package:flutter_tools/src/disabled_usage.dart';
 import 'package:flutter_tools/src/bundle.dart';
 import 'package:flutter_tools/src/globals.dart';
-import 'package:flutter_tools/src/usage.dart';
+import 'package:flutter_tools/src/reporting/reporting.dart';
 
 const String _kOptionPackages = 'packages';
 const String _kOptionAsset = 'asset-dir';
@@ -58,11 +57,11 @@ Future<void> run(List<String> args) async {
   }
   Cache.flutterRoot = platform.environment['FLUTTER_ROOT'];
 
-  final String assetDir = argResults[_kOptionAsset];
+  final String assetDir = argResults[_kOptionAsset] as String;
   final AssetBundle assets = await buildAssets(
-    manifestPath: argResults[_kOptionManifest] ?? defaultManifestPath,
+    manifestPath: argResults[_kOptionManifest] as String ?? defaultManifestPath,
     assetDirPath: assetDir,
-    packagesPath: argResults[_kOptionPackages],
+    packagesPath: argResults[_kOptionPackages] as String,
     includeDefaultFonts: false,
   );
 
@@ -78,8 +77,8 @@ Future<void> run(List<String> args) async {
   });
   await Future.wait<void>(calls);
 
-  final String outputMan = argResults[_kOptionAssetManifestOut];
-  await writeFuchsiaManifest(assets, argResults[_kOptionAsset], outputMan, argResults[_kOptionComponentName]);
+  final String outputMan = argResults[_kOptionAssetManifestOut] as String;
+  await writeFuchsiaManifest(assets, argResults[_kOptionAsset] as String, outputMan, argResults[_kOptionComponentName] as String);
 }
 
 Future<void> writeFuchsiaManifest(AssetBundle assets, String outputBase, String fileDest, String componentName) async {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,8 +29,9 @@ Future<void> main() async {
         deviceId,
       ];
       final Process process = await startProcess(
-          path.join(flutterDirectory.path, 'bin', 'flutter'),
-          <String>['run']..addAll(options));
+        path.join(flutterDirectory.path, 'bin', 'flutter'),
+        <String>['run', ...options],
+      );
 
       final Stream<String> lines = process.stdout
         .transform(utf8.decoder)

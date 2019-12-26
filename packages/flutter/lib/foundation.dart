@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -35,6 +35,7 @@ export 'src/foundation/annotations.dart';
 export 'src/foundation/assertions.dart';
 export 'src/foundation/basic_types.dart';
 export 'src/foundation/binding.dart';
+export 'src/foundation/bitfield.dart';
 export 'src/foundation/change_notifier.dart';
 export 'src/foundation/collections.dart';
 export 'src/foundation/consolidate_response.dart';

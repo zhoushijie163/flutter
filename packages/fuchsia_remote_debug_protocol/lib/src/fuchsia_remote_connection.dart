@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -81,11 +81,11 @@ enum DartVmEventType {
 /// An event regarding the Dart VM.
 ///
 /// Specifies the type of the event (whether the VM has started or has stopped),
-/// and contains the service port of the VM as well as a URI to connect to it.
+/// and contains the service port of the VM as well as a URL to connect to it.
 class DartVmEvent {
   DartVmEvent._({this.eventType, this.servicePort, this.uri});
 
-  /// The URI used to connect to the Dart VM.
+  /// The URL used to connect to the Dart VM.
   final Uri uri;
 
   /// The type of event regarding this instance of the Dart VM.
@@ -606,24 +606,21 @@ class _SshPortForwarder implements PortForwarder {
     // IPv6 interface, it cannot be used to connect to a websocket.
     final String formattedForwardingUrl =
         '${localSocket.port}:$_ipv4Loopback:$remotePort';
-    final List<String> command = <String>['ssh'];
-    if (isIpV6) {
-      command.add('-6');
-    }
-    if (sshConfigPath != null) {
-      command.addAll(<String>['-F', sshConfigPath]);
-    }
     final String targetAddress =
         isIpV6 && interface.isNotEmpty ? '$address%$interface' : address;
     const String dummyRemoteCommand = 'true';
-    command.addAll(<String>[
+    final List<String> command = <String>[
+      'ssh',
+      if (isIpV6) '-6',
+      if (sshConfigPath != null)
+        ...<String>['-F', sshConfigPath],
       '-nNT',
       '-f',
       '-L',
       formattedForwardingUrl,
       targetAddress,
       dummyRemoteCommand,
-    ]);
+    ];
     _log.fine("_SshPortForwarder running '${command.join(' ')}'");
     // Must await for the port forwarding function to completer here, as
     // forwarding must be completed before surfacing VM events (as the user may
@@ -649,20 +646,19 @@ class _SshPortForwarder implements PortForwarder {
     // uses the IPv4 loopback.
     final String formattedForwardingUrl =
         '${_localSocket.port}:$_ipv4Loopback:$_remotePort';
-    final List<String> command = <String>['ssh'];
     final String targetAddress = _ipV6 && _interface.isNotEmpty
         ? '$_remoteAddress%$_interface'
         : _remoteAddress;
-    if (_sshConfigPath != null) {
-      command.addAll(<String>['-F', _sshConfigPath]);
-    }
-    command.addAll(<String>[
+    final List<String> command = <String>[
+      'ssh',
+      if (_sshConfigPath != null)
+        ...<String>['-F', _sshConfigPath],
       '-O',
       'cancel',
       '-L',
       formattedForwardingUrl,
       targetAddress,
-    ]);
+    ];
     _log.fine(
         'Shutting down SSH forwarding with command: ${command.join(' ')}');
     final ProcessResult result = await _processManager.run(command);

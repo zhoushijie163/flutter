@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@ import '../asset.dart';
 import '../base/common.dart';
 import '../base/file_system.dart';
 import '../base/platform.dart';
+import '../build_info.dart';
 import '../bundle.dart';
 import '../cache.dart';
 import '../codegen.dart';
@@ -20,9 +21,14 @@ import '../runner/flutter_command.dart';
 import '../test/coverage_collector.dart';
 import '../test/event_printer.dart';
 import '../test/runner.dart';
+import '../test/test_wrapper.dart';
 import '../test/watcher.dart';
+
 class TestCommand extends FastFlutterCommand {
-  TestCommand({ bool verboseHelp = false }) {
+  TestCommand({
+    bool verboseHelp = false,
+    this.testWrapper = const TestWrapper(),
+  }) : assert(testWrapper != null) {
     requiresPubspecYaml();
     usesPubOption();
     argParser
@@ -41,7 +47,7 @@ class TestCommand extends FastFlutterCommand {
         negatable: false,
         help: 'Start in a paused mode and wait for a debugger to connect.\n'
               'You must specify a single test file to run, explicitly.\n'
-              'Instructions for connecting with a debugger and printed to the '
+              'Instructions for connecting with a debugger are printed to the '
               'console once the test has started.',
       )
       ..addFlag('disable-service-auth-codes',
@@ -49,7 +55,7 @@ class TestCommand extends FastFlutterCommand {
         defaultsTo: false,
         negatable: false,
         help: 'No longer require an authentication code to connect to the VM '
-              'service (not recommended).'
+              'service (not recommended).',
       )
       ..addFlag('coverage',
         defaultsTo: false,
@@ -77,12 +83,6 @@ class TestCommand extends FastFlutterCommand {
         help: 'Handle machine structured JSON command input\n'
               'and provide output and progress in machine friendly format.',
       )
-      ..addFlag('track-widget-creation',
-        negatable: false,
-        hide: !verboseHelp,
-        help: 'Track widget creation locations.\n'
-              'This enables testing of features such as the widget inspector.',
-      )
       ..addFlag('update-goldens',
         negatable: false,
         help: 'Whether matchesGoldenFile() calls within your test methods should '
@@ -92,20 +92,40 @@ class TestCommand extends FastFlutterCommand {
         abbr: 'j',
         defaultsTo: math.max<int>(1, platform.numberOfProcessors - 2).toString(),
         help: 'The number of concurrent test processes to run.',
-        valueHelp: 'jobs'
+        valueHelp: 'jobs',
       )
       ..addFlag('test-assets',
         defaultsTo: true,
         negatable: true,
         help: 'Whether to build the assets bundle for testing.\n'
               'Consider using --no-test-assets if assets are not required.',
+      )
+      ..addOption('platform',
+        allowed: const <String>['tester', 'chrome'],
+        defaultsTo: 'tester',
+        help: 'The platform to run the unit tests on. Defaults to "tester".',
+      )
+      ..addOption('test-randomize-ordering-seed',
+        defaultsTo: '0',
+        help: 'If positive, use this as a seed to randomize the execution of '
+              'test cases (must be a 32bit unsigned integer).\n'
+              'If "random", pick a random seed to use.\n'
+              'If 0 or not set, do not randomize test case execution order.',
       );
+    usesTrackWidgetCreation(verboseHelp: verboseHelp);
   }
 
+  /// The interface for starting and configuring the tester.
+  final TestWrapper testWrapper;
+
   @override
-  Future<Set<DevelopmentArtifact>> get requiredArtifacts async => <DevelopmentArtifact>{
-    DevelopmentArtifact.universal,
-  };
+  Future<Set<DevelopmentArtifact>> get requiredArtifacts async {
+    final Set<DevelopmentArtifact> results = <DevelopmentArtifact>{};
+    if (stringArg('platform') == 'chrome') {
+      results.add(DevelopmentArtifact.web);
+    }
+    return results;
+  }
 
   @override
   String get name => 'test';
@@ -124,20 +144,20 @@ class TestCommand extends FastFlutterCommand {
         'directory (or one of its subdirectories).');
     }
     if (shouldRunPub) {
-      await pubGet(context: PubContext.getVerifyContext(name), skipPubspecYamlCheck: true);
+      await pub.get(context: PubContext.getVerifyContext(name), skipPubspecYamlCheck: true);
     }
-    final bool buildTestAssets = argResults['test-assets'];
-    final List<String> names = argResults['name'];
-    final List<String> plainNames = argResults['plain-name'];
+    final bool buildTestAssets = boolArg('test-assets');
+    final List<String> names = stringsArg('name');
+    final List<String> plainNames = stringsArg('plain-name');
     final FlutterProject flutterProject = FlutterProject.current();
 
     if (buildTestAssets && flutterProject.manifest.assets.isNotEmpty) {
       await _buildTestAsset();
     }
 
-    Iterable<String> files = argResults.rest.map<String>((String testPath) => fs.path.absolute(testPath)).toList();
+    List<String> files = argResults.rest.map<String>((String testPath) => fs.path.absolute(testPath)).toList();
 
-    final bool startPaused = argResults['start-paused'];
+    final bool startPaused = boolArg('start-paused');
     if (startPaused && files.length != 1) {
       throwToolExit(
         'When using --start-paused, you must specify a single test file to run.',
@@ -145,7 +165,7 @@ class TestCommand extends FastFlutterCommand {
       );
     }
 
-    final int jobs = int.tryParse(argResults['concurrency']);
+    final int jobs = int.tryParse(stringArg('concurrency'));
     if (jobs == null || jobs <= 0 || !jobs.isFinite) {
       throwToolExit(
         'Could not parse -j/--concurrency argument. It must be an integer greater than zero.'
@@ -157,8 +177,9 @@ class TestCommand extends FastFlutterCommand {
       // We don't scan the entire package, only the test/ subdirectory, so that
       // files with names like like "hit_test.dart" don't get run.
       workDir = fs.directory('test');
-      if (!workDir.existsSync())
+      if (!workDir.existsSync()) {
         throwToolExit('Test directory "${workDir.path}" not found.');
+      }
       files = _findTests(workDir).toList();
       if (files.isEmpty) {
         throwToolExit(
@@ -166,16 +187,25 @@ class TestCommand extends FastFlutterCommand {
             'Test files must be in that directory and end with the pattern "_test.dart".'
         );
       }
+    } else {
+      files = <String>[
+        for (String path in files)
+          if (fs.isDirectorySync(path))
+            ..._findTests(fs.directory(path))
+          else
+            path,
+      ];
     }
 
     CoverageCollector collector;
-    if (argResults['coverage'] || argResults['merge-coverage']) {
+    if (boolArg('coverage') || boolArg('merge-coverage')) {
+      final String projectName = FlutterProject.current().manifest.appName;
       collector = CoverageCollector(
-        flutterProject: FlutterProject.current(),
+        libraryPredicate: (String libraryName) => libraryName.contains(projectName),
       );
     }
 
-    final bool machine = argResults['machine'];
+    final bool machine = boolArg('machine');
     if (collector != null && machine) {
       throwToolExit("The test command doesn't support --machine and coverage together");
     }
@@ -204,9 +234,10 @@ class TestCommand extends FastFlutterCommand {
     }
 
     final bool disableServiceAuthCodes =
-      argResults['disable-service-auth-codes'];
+      boolArg('disable-service-auth-codes');
 
     final int result = await runTests(
+      testWrapper,
       files,
       workDir: workDir,
       names: names,
@@ -215,23 +246,31 @@ class TestCommand extends FastFlutterCommand {
       enableObservatory: collector != null || startPaused,
       startPaused: startPaused,
       disableServiceAuthCodes: disableServiceAuthCodes,
-      ipv6: argResults['ipv6'],
+      ipv6: boolArg('ipv6'),
       machine: machine,
-      trackWidgetCreation: argResults['track-widget-creation'],
-      updateGoldens: argResults['update-goldens'],
+      buildMode: BuildMode.debug,
+      trackWidgetCreation: boolArg('track-widget-creation'),
+      updateGoldens: boolArg('update-goldens'),
       concurrency: jobs,
       buildTestAssets: buildTestAssets,
       flutterProject: flutterProject,
+      web: stringArg('platform') == 'chrome',
+      randomSeed: stringArg('test-randomize-ordering-seed'),
     );
 
     if (collector != null) {
-      if (!await collector.collectCoverageData(
-          argResults['coverage-path'], mergeCoverageData: argResults['merge-coverage']))
+      final bool collectionResult = await collector.collectCoverageData(
+        stringArg('coverage-path'),
+        mergeCoverageData: boolArg('merge-coverage'),
+      );
+      if (!collectionResult) {
         throwToolExit(null);
+      }
     }
 
-    if (result != 0)
+    if (result != 0) {
       throwToolExit(null);
+    }
     return const FlutterCommandResult(ExitStatus.success);
   }
 
@@ -246,6 +285,7 @@ class TestCommand extends FastFlutterCommand {
           assetBundle.entries);
     }
   }
+
   bool _needRebuild(Map<String, DevFSContent> entries) {
     final File manifest = fs.file(fs.path.join('build', 'unit_test_assets', 'AssetManifest.json'));
     if (!manifest.existsSync()) {

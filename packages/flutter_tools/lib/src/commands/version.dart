@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@ import 'dart:async';
 
 import '../base/common.dart';
 import '../base/file_system.dart';
+import '../base/io.dart';
 import '../base/os.dart';
 import '../base/process.dart';
 import '../base/version.dart';
@@ -17,6 +18,7 @@ import '../version.dart';
 
 class VersionCommand extends FlutterCommand {
   VersionCommand() : super() {
+    usesPubOption(hide: true);
     argParser.addFlag('force',
       abbr: 'f',
       help: 'Force switch to older Flutter versions that do not include a version command',
@@ -34,10 +36,20 @@ class VersionCommand extends FlutterCommand {
   Version minSupportedVersion = Version.parse('1.2.1');
 
   Future<List<String>> getTags() async {
-    final RunResult runResult = await runCheckedAsync(
-      <String>['git', 'tag', '-l', 'v*', '--sort=-creatordate'],
-      workingDirectory: Cache.flutterRoot,
-    );
+    RunResult runResult;
+    try {
+      runResult = await processUtils.run(
+        <String>['git', 'tag', '-l', 'v*', '--sort=-creatordate'],
+        throwOnError: true,
+        workingDirectory: Cache.flutterRoot,
+      );
+    } on ProcessException catch (error) {
+      throwToolExit(
+        'Unable to get the tags. '
+        'This might be due to git not being installed or an internal error'
+        '\nError: $error.'
+      );
+    }
     return runResult.toString().split('\n');
   }
 
@@ -55,9 +67,13 @@ class VersionCommand extends FlutterCommand {
 
     // check min supported version
     final Version targetVersion = Version.parse(version);
+    if (targetVersion == null) {
+      throwToolExit('Failed to parse version "$version"');
+    }
+
     bool withForce = false;
     if (targetVersion < minSupportedVersion) {
-      if (!argResults['force']) {
+      if (!boolArg('force')) {
         printError(
           'Version command is not supported in $targetVersion and it is supported since version $minSupportedVersion'
           'which means if you switch to version $minSupportedVersion then you can not use version command.'
@@ -69,8 +85,9 @@ class VersionCommand extends FlutterCommand {
     }
 
     try {
-      await runCheckedAsync(
+      await processUtils.run(
         <String>['git', 'checkout', 'v$version'],
+        throwOnError: true,
         workingDirectory: Cache.flutterRoot,
       );
     } catch (e) {
@@ -87,7 +104,7 @@ class VersionCommand extends FlutterCommand {
     // if necessary.
     printStatus('');
     printStatus('Downloading engine...');
-    int code = await runCommandAndStreamOutput(<String>[
+    int code = await processUtils.stream(<String>[
       fs.path.join('bin', 'flutter'),
       '--no-color',
       'precache',
@@ -101,9 +118,9 @@ class VersionCommand extends FlutterCommand {
     printStatus(flutterVersion.toString());
 
     final String projectRoot = findProjectRoot();
-    if (projectRoot != null) {
+    if (projectRoot != null && shouldRunPub) {
       printStatus('');
-      await pubGet(
+      await pub.get(
         context: PubContext.pubUpgrade,
         directory: projectRoot,
         upgrade: true,
@@ -114,7 +131,7 @@ class VersionCommand extends FlutterCommand {
     // Run a doctor check in case system requirements have changed.
     printStatus('');
     printStatus('Running flutter doctor...');
-    code = await runCommandAndStreamOutput(
+    code = await processUtils.stream(
       <String>[
         fs.path.join('bin', 'flutter'),
         'doctor',

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,38 +28,38 @@ class FooState extends State<Foo> {
                   scrollController.animateTo(200.0, duration: const Duration(milliseconds: 500), curve: Curves.linear);
                 },
                 child: const DecoratedBox(
-                  decoration: BoxDecoration(color: Color(0)),
+                  decoration: BoxDecoration(color: Color(0x00000000)),
                   child: SizedBox(
                     height: 200.0,
                   ),
                 ),
               ),
               const DecoratedBox(
-                decoration: BoxDecoration(color: Color(0)),
+                decoration: BoxDecoration(color: Color(0x00000000)),
                 child: SizedBox(
                   height: 200.0,
                 ),
               ),
               const DecoratedBox(
-                decoration: BoxDecoration(color: Color(0)),
+                decoration: BoxDecoration(color: Color(0x00000000)),
                 child: SizedBox(
                   height: 200.0,
                 ),
               ),
               const DecoratedBox(
-                decoration: BoxDecoration(color: Color(0)),
+                decoration: BoxDecoration(color: Color(0x00000000)),
                 child: SizedBox(
                   height: 200.0,
                 ),
               ),
               const DecoratedBox(
-                decoration: BoxDecoration(color: Color(0)),
+                decoration: BoxDecoration(color: Color(0x00000000)),
                 child: SizedBox(
                   height: 200.0,
                 ),
               ),
               const DecoratedBox(
-                decoration: BoxDecoration(color: Color(0)),
+                decoration: BoxDecoration(color: Color(0x00000000)),
                 child: SizedBox(
                   height: 200.0,
                 ),

@@ -1,15 +1,13 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'dart:async';
 import 'dart:math' show Random, max;
 
-import 'package:crypto/crypto.dart';
 import 'package:intl/intl.dart';
 
 import '../convert.dart';
-import '../globals.dart';
 import 'context.dart';
 import 'file_system.dart';
 import 'io.dart' as io;
@@ -22,8 +20,19 @@ class BotDetector {
   const BotDetector();
 
   bool get isRunningOnBot {
-    return platform.environment['BOT'] != 'false'
-       && (platform.environment['BOT'] == 'true'
+    if (
+        // Explicitly stated to not be a bot.
+        platform.environment['BOT'] == 'false'
+
+        // Set by the IDEs to the IDE name, so a strong signal that this is not a bot.
+        || platform.environment.containsKey('FLUTTER_HOST')
+        // When set, GA logs to a local file (normally for tests) so we don't need to filter.
+        || platform.environment.containsKey('FLUTTER_ANALYTICS_LOG_FILE')
+    ) {
+      return false;
+    }
+
+    return platform.environment['BOT'] == 'true'
 
         // https://docs.travis-ci.com/user/environment-variables/#Default-Environment-Variables
         || platform.environment['TRAVIS'] == 'true'
@@ -37,31 +46,22 @@ class BotDetector {
         || platform.environment.containsKey('CIRRUS_CI')
 
         // https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-env-vars.html
-        || (platform.environment.containsKey('AWS_REGION') && platform.environment.containsKey('CODEBUILD_INITIATOR'))
+        || (platform.environment.containsKey('AWS_REGION') &&
+            platform.environment.containsKey('CODEBUILD_INITIATOR'))
 
         // https://wiki.jenkins.io/display/JENKINS/Building+a+software+project#Buildingasoftwareproject-belowJenkinsSetEnvironmentVariables
         || platform.environment.containsKey('JENKINS_URL')
 
         // Properties on Flutter's Chrome Infra bots.
         || platform.environment['CHROME_HEADLESS'] == '1'
-        || platform.environment.containsKey('BUILDBOT_BUILDERNAME'));
+        || platform.environment.containsKey('BUILDBOT_BUILDERNAME')
+        || platform.environment.containsKey('SWARMING_TASK_ID');
   }
 }
 
 bool get isRunningOnBot {
   final BotDetector botDetector = context.get<BotDetector>() ?? _kBotDetector;
   return botDetector.isRunningOnBot;
-}
-
-String hex(List<int> bytes) {
-  final StringBuffer result = StringBuffer();
-  for (int part in bytes)
-    result.write('${part < 16 ? '0' : ''}${part.toRadixString(16)}');
-  return result.toString();
-}
-
-String calculateSha(File file) {
-  return hex(sha1.convert(file.readAsBytesSync()).bytes);
 }
 
 /// Convert `foo_bar` to `fooBar`.
@@ -85,8 +85,9 @@ String snakeCase(String str, [ String sep = '_' ]) {
 }
 
 String toTitleCase(String str) {
-  if (str.isEmpty)
+  if (str.isEmpty) {
     return str;
+  }
   return str.substring(0, 1).toUpperCase() + str.substring(1);
 }
 
@@ -107,8 +108,9 @@ File getUniqueFile(Directory dir, String baseName, String ext) {
   while (true) {
     final String name = '${baseName}_${i.toString().padLeft(2, '0')}.$ext';
     final File file = fs.file(fs.path.join(dir.path, name));
-    if (!file.existsSync())
+    if (!file.existsSync()) {
       return file;
+    }
     i++;
   }
 }
@@ -188,11 +190,13 @@ class SettingsFile {
   SettingsFile.parse(String contents) {
     for (String line in contents.split('\n')) {
       line = line.trim();
-      if (line.startsWith('#') || line.isEmpty)
+      if (line.startsWith('#') || line.isEmpty) {
         continue;
+      }
       final int index = line.indexOf('=');
-      if (index != -1)
+      if (index != -1) {
         values[line.substring(0, index)] = line.substring(index + 1);
+      }
     }
   }
 
@@ -247,48 +251,11 @@ class Uuid {
 /// Given a data structure which is a Map of String to dynamic values, return
 /// the same structure (`Map<String, dynamic>`) with the correct runtime types.
 Map<String, dynamic> castStringKeyedMap(dynamic untyped) {
-  final Map<dynamic, dynamic> map = untyped;
-  return map.cast<String, dynamic>();
+  final Map<dynamic, dynamic> map = untyped as Map<dynamic, dynamic>;
+  return map?.cast<String, dynamic>();
 }
 
 typedef AsyncCallback = Future<void> Function();
-
-/// A [Timer] inspired class that:
-///   - has a different initial value for the first callback delay
-///   - waits for a callback to be complete before it starts the next timer
-class Poller {
-  Poller(this.callback, this.pollingInterval, { this.initialDelay = Duration.zero }) {
-    Future<void>.delayed(initialDelay, _handleCallback);
-  }
-
-  final AsyncCallback callback;
-  final Duration initialDelay;
-  final Duration pollingInterval;
-
-  bool _cancelled = false;
-  Timer _timer;
-
-  Future<void> _handleCallback() async {
-    if (_cancelled)
-      return;
-
-    try {
-      await callback();
-    } catch (error) {
-      printTrace('Error from poller: $error');
-    }
-
-    if (!_cancelled)
-      _timer = Timer(pollingInterval, _handleCallback);
-  }
-
-  /// Cancels the poller.
-  void cancel() {
-    _cancelled = true;
-    _timer?.cancel();
-    _timer = null;
-  }
-}
 
 /// Returns a [Future] that completes when all given [Future]s complete.
 ///
@@ -300,9 +267,6 @@ class Poller {
 Future<List<T>> waitGroup<T>(Iterable<Future<T>> futures) {
   return Future.wait<T>(futures.where((Future<T> future) => future != null));
 }
-/// The terminal width used by the [wrapText] function if there is no terminal
-/// attached to [io.Stdio], --wrap is on, and --wrap-columns was not specified.
-const int kDefaultTerminalColumns = 100;
 
 /// Smallest column that will be used for text wrapping. If the requested column
 /// width is smaller than this, then this is what will be used.

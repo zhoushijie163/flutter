@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@ import 'dart:typed_data';
 ///
 /// The `total` parameter will contain the _expected_ total number of bytes to
 /// be received across the wire (extracted from the value of the
-/// `Content-Length` HTTP response header), or -1 if the size of the response
+/// `Content-Length` HTTP response header), or null if the size of the response
 /// body is not known in advance (this is common for HTTP chunked transfer
 /// encoding, which itself is common when a large amount of data is being
 /// returned to the client and the total size of the response may not be known
@@ -43,10 +43,8 @@ typedef BytesReceivedCallback = void Function(int cumulative, int total);
 /// bytes from this method (assuming the response is sending compressed bytes),
 /// set both [HttpClient.autoUncompress] to false and the `autoUncompress`
 /// parameter to false.
-// TODO(tvolkert): Remove the [client] param once https://github.com/dart-lang/sdk/issues/36971 is fixed.
 Future<Uint8List> consolidateHttpClientResponseBytes(
   HttpClientResponse response, {
-  HttpClient client,
   bool autoUncompress = true,
   BytesReceivedCallback onBytesReceived,
 }) {
@@ -56,15 +54,23 @@ Future<Uint8List> consolidateHttpClientResponseBytes(
   final _OutputBuffer output = _OutputBuffer();
   ByteConversionSink sink = output;
   int expectedContentLength = response.contentLength;
-  if (response.headers?.value(HttpHeaders.contentEncodingHeader) == 'gzip') {
-    if (client?.autoUncompress ?? true) {
+  if (expectedContentLength == -1)
+    expectedContentLength = null;
+  switch (response.compressionState) {
+    case HttpClientResponseCompressionState.compressed:
+      if (autoUncompress) {
+        // We need to un-compress the bytes as they come in.
+        sink = gzip.decoder.startChunkedConversion(output);
+      }
+      break;
+    case HttpClientResponseCompressionState.decompressed:
       // response.contentLength will not match our bytes stream, so we declare
       // that we don't know the expected content length.
-      expectedContentLength = -1;
-    } else if (autoUncompress) {
-      // We need to un-compress the bytes as they come in.
-      sink = gzip.decoder.startChunkedConversion(output);
-    }
+      expectedContentLength = null;
+      break;
+    case HttpClientResponseCompressionState.notCompressed:
+      // Fall-through.
+      break;
   }
 
   int bytesReceived = 0;

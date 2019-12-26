@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,6 +22,9 @@ class RequestData extends Command {
   String get kind => 'request_data';
 
   @override
+  bool get requiresRootWidgetAttached => false;
+
+  @override
   Map<String, String> serialize() => super.serialize()..addAll(<String, String>{
     'message': message,
   });
@@ -37,7 +40,7 @@ class RequestDataResult extends Result {
 
   /// Deserializes the result from JSON.
   static RequestDataResult fromJson(Map<String, dynamic> json) {
-    return RequestDataResult(json['message']);
+    return RequestDataResult(json['message'] as String);
   }
 
   @override

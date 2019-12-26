@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,15 +17,13 @@ class AndroidStudioValidator extends DoctorValidator {
   final AndroidStudio _studio;
 
   static List<DoctorValidator> get allValidators {
-    final List<DoctorValidator> validators = <DoctorValidator>[];
     final List<AndroidStudio> studios = AndroidStudio.allInstalled();
-    if (studios.isEmpty) {
-      validators.add(NoAndroidStudioValidator());
-    } else {
-      validators.addAll(studios
-          .map<DoctorValidator>((AndroidStudio studio) => AndroidStudioValidator(studio)));
-    }
-    return validators;
+    return <DoctorValidator>[
+      if (studios.isEmpty)
+        NoAndroidStudioValidator()
+      else
+        ...studios.map<DoctorValidator>((AndroidStudio studio) => AndroidStudioValidator(studio)),
+    ];
   }
 
   @override
@@ -73,7 +71,7 @@ class NoAndroidStudioValidator extends DoctorValidator {
   Future<ValidationResult> validate() async {
     final List<ValidationMessage> messages = <ValidationMessage>[];
 
-    final String cfgAndroidStudio = config.getValue('android-studio-dir');
+    final String cfgAndroidStudio = config.getValue('android-studio-dir') as String;
     if (cfgAndroidStudio != null) {
       messages.add(ValidationMessage.error(userMessages.androidStudioMissing(cfgAndroidStudio)));
     }

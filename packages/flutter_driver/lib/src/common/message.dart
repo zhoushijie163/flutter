@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,6 +31,20 @@ abstract class Command {
 
   /// Identifies the type of the command object and of the handler.
   String get kind;
+
+  /// Whether this command requires the widget tree to be initialized before
+  /// the command may be run.
+  ///
+  /// This defaults to true to force the application under test to call [runApp]
+  /// before attempting to remotely drive the application. Subclasses may
+  /// override this to return false if they allow invocation before the
+  /// application has started.
+  ///
+  /// See also:
+  ///
+  ///  * [WidgetsBinding.isRootWidgetAttached], which indicates whether the
+  ///    widget tree has been initialized.
+  bool get requiresRootWidgetAttached => true;
 
   /// Serializes this command to parameter name/value pairs.
   @mustCallSuper
